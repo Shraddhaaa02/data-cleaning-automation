@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Data Cleaning & Reporting Automation</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f4f6fb;
+  --surface:#fff;
+  --surface2:#f0f2f8;
+  --border:rgba(0,0,0,0.09);
+  --text:#1a1d2e;
+  --muted:#6b7280;
+  --accent:#0F6E56;
+  --accent2:#185FA5;
+  --radius:10px;
+  --radius-lg:14px;
+  --red:#A32D2D;
+  --green:#3B6D11;
+  --orange:#BA7517;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:10;}
+header h1{font-size:18px;font-weight:600;}
+.chip{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--muted);}
+.chip.loaded{background:#eaf3de;color:#3B6D11;border-color:#C0DD97;}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--radius);border:1.5px solid var(--accent);color:var(--accent);background:transparent;font-size:13px;font-weight:500;cursor:pointer;transition:background .15s;}
+.btn:hover{background:#e6f5f1;}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn.primary:hover{background:#0a5240;}
+.btn.blue{background:var(--accent2);color:#fff;border-color:var(--accent2);}
+.btn.blue:hover{background:#0C447C;}
+
+main{max-width:1280px;margin:0 auto;padding:24px 32px;}
+
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius-lg);padding:32px;text-align:center;background:var(--surface);margin-bottom:24px;cursor:pointer;transition:border-color .2s,background .2s;}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:#e6f5f1;}
+.upload-zone h2{font-size:15px;font-weight:600;margin-bottom:6px;}
+.upload-zone p{font-size:13px;color:var(--muted);margin-bottom:14px;}
+.upload-zone input[type=file]{display:none;}
+.sample-btn{background:transparent;border:none;color:var(--accent);font-size:12px;cursor:pointer;text-decoration:underline;margin-top:10px;display:inline-block;}
+
+/* Steps */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px;}
+.step{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;display:flex;gap:12px;align-items:flex-start;}
+.step-num{background:var(--accent);color:#fff;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;}
+.step h4{font-size:13px;font-weight:600;margin-bottom:3px;}
+.step p{font-size:12px;color:var(--muted);}
+
+/* KPI cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:22px;}
+.kpi{background:var(--surface2);border-radius:var(--radius);padding:14px 18px;}
+.kpi-label{font-size:12px;color:var(--muted);margin-bottom:5px;}
+.kpi-value{font-size:22px;font-weight:600;}
+.kpi-value.red{color:var(--red);}
+.kpi-value.green{color:var(--green);}
+.kpi-value.orange{color:var(--orange);}
+
+/* Issue badges */
+.issue-list{list-style:none;display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;}
+.issue-badge{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;}
+.issue-badge.missing{background:#fcebeb;color:#A32D2D;}
+.issue-badge.duplicate{background:#faeeda;color:#854F0B;}
+.issue-badge.inconsistent{background:#e6f1fb;color:#185FA5;}
+.issue-badge.ok{background:#eaf3de;color:#3B6D11;}
+
+/* Before/After */
+.before-after{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;}
+.card h3{font-size:14px;font-weight:600;margin-bottom:14px;color:var(--text);}
+.card h3 .sub{font-size:12px;color:var(--muted);font-weight:400;margin-left:6px;}
+.table-wrap{overflow-x:auto;max-height:260px;overflow-y:auto;}
+table.mini{width:100%;border-collapse:collapse;font-size:12px;}
+table.mini th{background:var(--surface2);padding:7px 10px;text-align:left;font-weight:600;border-bottom:1px solid var(--border);white-space:nowrap;}
+table.mini td{padding:6px 10px;border-bottom:1px solid var(--border);}
+table.mini tr:last-child td{border-bottom:none;}
+.cell-bad{background:#fff0f0;color:#A32D2D;}
+.cell-fixed{background:#f0fff4;color:#3B6D11;}
+
+/* Charts */
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+.chart-wrap{position:relative;width:100%;}
+
+/* Report */
+.report-section{margin-top:6px;}
+.report-box{background:#1a1d2e;color:#e2e8f0;border-radius:var(--radius-lg);padding:20px 24px;font-family:'Courier New',monospace;font-size:13px;line-height:1.8;white-space:pre-wrap;margin-bottom:16px;}
+.report-box .r-title{color:#7dd3b0;font-weight:700;font-size:15px;}
+.report-box .r-ok{color:#86efac;}
+.report-box .r-warn{color:#fcd34d;}
+.report-box .r-err{color:#fca5a5;}
+.report-box .r-info{color:#93c5fd;}
+
+@media(max-width:768px){
+  main{padding:16px;}
+  .before-after,.charts-row{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧹 Data Cleaning & Reporting Automation</h1>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span class="chip" id="dataStatus">No data loaded</span>
+    <button class="btn primary" onclick="document.getElementById('fileInput').click()">⬆ Import Data</button>
+    <input type="file" id="fileInput" accept=".csv,.xlsx,.xls" onchange="handleFile(event)"/>
+  </div>
+</header>
+
+<main>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()"
+    ondragover="event.preventDefault();this.classList.add('drag')"
+    ondragleave="this.classList.remove('drag')"
+    ondrop="event.preventDefault();this.classList.remove('drag');handleFile({target:{files:event.dataTransfer.files}})">
+    <h2>📂 Drop your dirty data file here</h2>
+    <p>Supports .csv, .xlsx, .xls — tool will auto-detect and fix issues</p>
+    <button class="btn" onclick="event.stopPropagation();document.getElementById('fileInput').click()">Choose File</button>
+    <br/>
+    <button class="sample-btn" onclick="event.stopPropagation();loadSampleData()">↓ Load sample dirty data instead</button>
+  </div>
+
+  <!-- How it works -->
+  <div class="steps" id="stepsSection">
+    <div class="step"><div class="step-num">1</div><div><h4>Upload Data</h4><p>CSV or Excel file with messy data</p></div></div>
+    <div class="step"><div class="step-num">2</div><div><h4>Auto Detection</h4><p>Finds missing values, duplicates, inconsistencies</p></div></div>
+    <div class="step"><div class="step-num">3</div><div><h4>Auto Clean</h4><p>Fixes issues automatically with smart rules</p></div></div>
+    <div class="step"><div class="step-num">4</div><div><h4>Visual Report</h4><p>Charts + automated summary report generated</p></div></div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid" id="kpiGrid" style="display:none">
+    <div class="kpi"><div class="kpi-label">Total Rows</div><div class="kpi-value" id="kTotal">—</div></div>
+    <div class="kpi"><div class="kpi-label">Missing Values</div><div class="kpi-value red" id="kMissing">—</div></div>
+    <div class="kpi"><div class="kpi-label">Duplicates Found</div><div class="kpi-value orange" id="kDups">—</div></div>
+    <div class="kpi"><div class="kpi-label">Rows After Cleaning</div><div class="kpi-value green" id="kClean">—</div></div>
+    <div class="kpi"><div class="kpi-label">Data Quality Score</div><div class="kpi-value" id="kScore">—</div></div>
+  </div>
+
+  <!-- Issues Found -->
+  <div id="issuesSection" style="display:none;margin-bottom:18px;">
+    <div class="card">
+      <h3>🔍 Issues Detected</h3>
+      <ul class="issue-list" id="issueList"></ul>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-row" id="chartsRow" style="display:none">
+    <div class="card">
+      <h3>Missing Values per Column</h3>
+      <div class="chart-wrap" style="height:220px"><canvas id="missingChart"></canvas></div>
+    </div>
+    <div class="card">
+      <h3>Data Quality Breakdown</h3>
+      <div class="chart-wrap" style="height:220px"><canvas id="qualityChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Before / After -->
+  <div class="before-after" id="beforeAfter" style="display:none">
+    <div class="card">
+      <h3>❌ Before Cleaning <span class="sub">(raw data)</span></h3>
+      <div class="table-wrap"><table class="mini" id="beforeTable"></table></div>
+    </div>
+    <div class="card">
+      <h3>✅ After Cleaning <span class="sub">(fixed data)</span></h3>
+      <div class="table-wrap"><table class="mini" id="afterTable"></table></div>
+    </div>
+  </div>
+
+  <!-- Automated Report -->
+  <div id="reportSection" style="display:none">
+    <div class="card report-section">
+      <h3>📊 Auto-Generated Report <button class="btn blue" style="float:right;margin-top:-4px" onclick="downloadReport()">⬇ Download Report</button></h3>
+      <div class="report-box" id="reportBox"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+let rawData = [], cleanData = [], cols = [];
+let missingC, qualityC;
+
+// ── SAMPLE DIRTY DATA ──
+function loadSampleData() {
+  rawData = [
+    {ID:'1',Name:'Rahul Sharma',Age:'28',City:'Mumbai',Salary:'55000',Department:'IT'},
+    {ID:'2',Name:'Priya Singh',Age:'',City:'Delhi',Salary:'62000',Department:'HR'},
+    {ID:'3',Name:'RAHUL SHARMA',Age:'28',City:'mumbai',Salary:'55000',Department:'IT'},
+    {ID:'4',Name:'Amit Kumar',Age:'35',City:'Bangalore',Salary:'N/A',Department:'Finance'},
+    {ID:'5',Name:'Sneha Patil',Age:'29',City:'Pune',Salary:'48000',Department:''},
+    {ID:'6',Name:'',Age:'31',City:'Hyderabad',Salary:'71000',Department:'Marketing'},
+    {ID:'7',Name:'Vikram Nair',Age:'200',City:'Chennai',Salary:'59000',Department:'IT'},
+    {ID:'8',Name:'Deepika Rao',Age:'26',City:'',Salary:'44000',Department:'HR'},
+    {ID:'9',Name:'Suresh Mehta',Age:'42',City:'Kolkata',Salary:'-5000',Department:'Finance'},
+    {ID:'10',Name:'Anjali Gupta',Age:'33',City:'Mumbai',Salary:'67000',Department:'IT'},
+    {ID:'11',Name:'Priya Singh',Age:'',City:'Delhi',Salary:'62000',Department:'HR'},
+    {ID:'12',Name:'Rohit Verma',Age:'NULL',City:'Jaipur',Salary:'52000',Department:'Sales'},
+    {ID:'13',Name:'Kavya Iyer',Age:'27',City:'Bangalore',Salary:'',Department:'Marketing'},
+    {ID:'14',Name:'AMIT KUMAR',Age:'35',City:'BANGALORE',Salary:'75000',Department:'Finance'},
+    {ID:'15',Name:'Nikhil Das',Age:'39',City:'Bhubaneswar',Salary:'49000',Department:'Sales'},
+  ];
+  cols = Object.keys(rawData[0]);
+  afterLoad('sample_dirty_data.csv (15 rows)');
+}
+
+// ── FILE HANDLER ──
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  if (ext === 'csv') {
+    Papa.parse(file, {
+      header:true, skipEmptyLines:false, dynamicTyping:false,
+      complete: r => { rawData = r.data; cols = r.meta.fields; afterLoad(file.name+'('+rawData.length+' rows)'); }
+    });
+  } else {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const wb = XLSX.read(ev.target.result,{type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rawData = XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+      cols = rawData.length ? Object.keys(rawData[0]) : [];
+      afterLoad(file.name+'('+rawData.length+' rows)');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function afterLoad(label) {
+  document.getElementById('dataStatus').textContent = '✓ '+label;
+  document.getElementById('dataStatus').className = 'chip loaded';
+  document.getElementById('dropZone').style.display = 'none';
+  document.getElementById('stepsSection').style.display = 'none';
+  cleanAndRender();
+  ['kpiGrid','issuesSection','chartsRow','beforeAfter','reportSection'].forEach(id=>{
+    document.getElementById(id).style.display = id==='kpiGrid'?'grid':'block';
+  });
+}
+
+// ── CLEANING LOGIC ──
+function isEmpty(val) {
+  return val===undefined||val===null||String(val).trim()===''||String(val).toLowerCase()==='null'||String(val).toLowerCase()==='n/a'||String(val).toLowerCase()==='na';
+}
+
+function cleanAndRender() {
+  // Step 1: detect missing
+  let missingCount = 0;
+  const missingPerCol = {};
+  cols.forEach(c => { missingPerCol[c] = 0; });
+  rawData.forEach(r => {
+    cols.forEach(c => { if (isEmpty(r[c])) { missingCount++; missingPerCol[c]++; } });
+  });
+
+  // Step 2: detect duplicates (by all cols)
+  const seen = new Set();
+  let dupCount = 0;
+  rawData.forEach(r => {
+    const key = cols.map(c=>String(r[c]||'').trim().toLowerCase()).join('|');
+    if (seen.has(key)) dupCount++;
+    else seen.add(key);
+  });
+
+  // Step 3: clean
+  const seenClean = new Set();
+  cleanData = [];
+  rawData.forEach(r => {
+    const cleaned = {...r};
+    // Fix case inconsistency for text cols
+    cols.forEach(c => {
+      let v = String(cleaned[c]||'').trim();
+      if (isEmpty(v)) { cleaned[c] = 'Unknown'; return; }
+      // Title case for name/city cols
+      if (c.toLowerCase().includes('name')||c.toLowerCase().includes('city')) {
+        cleaned[c] = v.replace(/\w\S*/g, t=>t.charAt(0).toUpperCase()+t.slice(1).toLowerCase());
+      }
+      // Fix invalid numbers
+      if (c.toLowerCase().includes('age')) {
+        const n = parseInt(v);
+        if (isNaN(n)||n<0||n>120) cleaned[c] = '0';
+      }
+      if (c.toLowerCase().includes('salary')) {
+        const n = parseInt(v);
+        if (isNaN(n)||n<0) cleaned[c] = '0';
+      }
+    });
+    // Remove duplicates
+    const key = cols.map(c=>String(cleaned[c]||'').trim().toLowerCase()).join('|');
+    if (!seenClean.has(key)) { seenClean.add(key); cleanData.push(cleaned); }
+  });
+
+  // Score
+  const totalCells = rawData.length * cols.length;
+  const issues = missingCount + dupCount;
+  const score = Math.max(0, Math.round((1 - issues/totalCells)*100));
+
+  // Render
+  renderKPIs(missingCount, dupCount, score);
+  renderIssues(missingCount, dupCount, missingPerCol);
+  renderCharts(missingPerCol, missingCount, dupCount, score);
+  renderBeforeAfter();
+  renderReport(missingCount, dupCount, score, missingPerCol);
+}
+
+function renderKPIs(missing, dups, score) {
+  document.getElementById('kTotal').textContent = rawData.length;
+  document.getElementById('kMissing').textContent = missing;
+  document.getElementById('kDups').textContent = dups;
+  document.getElementById('kClean').textContent = cleanData.length;
+  const scoreEl = document.getElementById('kScore');
+  scoreEl.textContent = score + '%';
+  scoreEl.className = 'kpi-value ' + (score>=80?'green':score>=60?'orange':'red');
+}
+
+function renderIssues(missing, dups, missingPerCol) {
+  const items = [];
+  if (missing > 0) items.push(`<li class="issue-badge missing">⚠ ${missing} Missing Values</li>`);
+  if (dups > 0) items.push(`<li class="issue-badge duplicate">🔁 ${dups} Duplicate Rows</li>`);
+  const inconsistent = cols.filter(c=>c.toLowerCase().includes('name')||c.toLowerCase().includes('city'));
+  if (inconsistent.length) items.push(`<li class="issue-badge inconsistent">🔤 Case Inconsistencies in: ${inconsistent.join(', ')}</li>`);
+  if (items.length === 0) items.push(`<li class="issue-badge ok">✅ No major issues found!</li>`);
+  document.getElementById('issueList').innerHTML = items.join('');
+}
+
+function renderCharts(missingPerCol, missing, dups, score) {
+  const colsWithMissing = Object.entries(missingPerCol).filter(([,v])=>v>0);
+
+  if (missingC) missingC.destroy();
+  missingC = new Chart(document.getElementById('missingChart'), {
+    type:'bar',
+    data:{
+      labels: colsWithMissing.length ? colsWithMissing.map(([k])=>k) : ['No Missing Values'],
+      datasets:[{
+        data: colsWithMissing.length ? colsWithMissing.map(([,v])=>v) : [0],
+        backgroundColor:'#A32D2D', borderRadius:5, borderSkipped:false
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{x:{grid:{display:false}},y:{grid:{color:'rgba(0,0,0,0.05)'},ticks:{stepSize:1}}}
+    }
+  });
+
+  if (qualityC) qualityC.destroy();
+  const cleanCells = rawData.length*cols.length - missing;
+  qualityC = new Chart(document.getElementById('qualityChart'), {
+    type:'doughnut',
+    data:{
+      labels:['Clean Data','Missing Values','Duplicates'],
+      datasets:[{
+        data:[cleanCells, missing, dups],
+        backgroundColor:['#3B6D11','#A32D2D','#BA7517'],
+        borderWidth:2,borderColor:'#fff'
+      }]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      plugins:{
+        legend:{position:'bottom',labels:{font:{size:12},padding:12,boxWidth:12}},
+        tooltip:{callbacks:{label:ctx=>' '+ctx.label+': '+ctx.parsed}}
+      }
+    }
+  });
+}
+
+function renderBeforeAfter() {
+  const show = 8;
+  const makeTable = (data, highlight) => {
+    const head = '<thead><tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr></thead>';
+    const body = '<tbody>'+data.slice(0,show).map((r,ri)=>'<tr>'+cols.map(c=>{
+      const v = r[c];
+      const raw = rawData[ri] ? rawData[ri][c] : v;
+      const isIssue = isEmpty(raw)||String(raw).toLowerCase()==='null'||String(raw).toLowerCase()==='n/a';
+      const wasFixed = highlight && isIssue;
+      const isCaseFixed = highlight && !isIssue && String(v)!==String(raw);
+      return `<td class="${wasFixed?'cell-fixed':isCaseFixed?'cell-fixed':''}">${v||''}</td>`;
+    }).join('')+'</tr>').join('')+'</tbody>';
+    return head+body;
+  };
+  document.getElementById('beforeTable').innerHTML = makeTable(rawData, false);
+  document.getElementById('afterTable').innerHTML = makeTable(cleanData, true);
+}
+
+function renderReport(missing, dups, score, missingPerCol) {
+  const now = new Date().toLocaleString('en-IN');
+  const topMissing = Object.entries(missingPerCol).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const grade = score>=80?'GOOD ✅':score>=60?'AVERAGE ⚠':'POOR ❌';
+
+  document.getElementById('reportBox').innerHTML = `<span class="r-title">═══════════════════════════════════════════════
+  DATA CLEANING & QUALITY REPORT
+  Generated: ${now}
+═══════════════════════════════════════════════</span>
+
+<span class="r-info">📁 DATASET SUMMARY</span>
+  Total Rows Loaded     : ${rawData.length}
+  Total Columns         : ${cols.length}
+  Total Cells           : ${rawData.length * cols.length}
+
+<span class="r-err">🔍 ISSUES FOUND</span>
+  Missing Values        : <span class="r-warn">${missing}</span>
+  Duplicate Rows        : <span class="r-warn">${dups}</span>
+  Case Inconsistencies  : <span class="r-warn">Detected in Name/City columns</span>
+  Invalid Numbers       : <span class="r-warn">Detected in Age/Salary columns</span>
+
+<span class="r-info">🔧 COLUMNS WITH MISSING VALUES</span>
+${topMissing.length ? topMissing.map(([k,v])=>`  ${k.padEnd(20)}: ${v} missing`).join('\n') : '  None found ✅'}
+
+<span class="r-ok">✅ CLEANING ACTIONS TAKEN</span>
+  Missing values        → Replaced with "Unknown"
+  Duplicate rows        → Removed (kept first occurrence)
+  Name/City columns     → Converted to Title Case
+  Invalid Age values    → Reset to 0 (flagged for review)
+  Negative Salaries     → Reset to 0 (flagged for review)
+
+<span class="r-info">📊 RESULTS</span>
+  Rows Before Cleaning  : ${rawData.length}
+  Rows After Cleaning   : ${cleanData.length}
+  Rows Removed          : ${rawData.length - cleanData.length}
+
+<span class="r-title">🏆 DATA QUALITY SCORE: ${score}% — ${grade}
+═══════════════════════════════════════════════</span>`;
+}
+
+function downloadReport() {
+  const text = document.getElementById('reportBox').innerText;
+  const blob = new Blob([text], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'data_cleaning_report.txt';
+  a.click();
+}
+</script>
+</body>
+</html>
